@@ -28,6 +28,16 @@ That starts the game, and listens on TCP port 2001, and updates the game state e
 I've been loading the application in intellij, and running the class there. Eventually, once this becomes a real Play app,
 the game engine will be started as a background job.
 
+Another easy way to run the server:
+
+    $ play dist
+
+This creates `target/universal/codacasng-1.0.zip`. Unzip that file somewhere.
+Then:
+
+    $ cd codacasng-1.0/lib
+    $ java -cp $(echo *.jar|sed 's/ /:/g') org.costine.codacas.system.Codacas 2100 100
+
 "Client" setup
 --------------
 To connect to the game, I currently use netcat (nc) on my MAC (OSX) as follows in a bash script called "codacas":
