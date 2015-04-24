@@ -144,13 +144,13 @@ class Handler(_sel:Selector, _socket:SocketChannel, _receiver:ActorRef)
         if (socket.isOpen) socket.close
       }
       catch {
-        case _soex =>
+        case _soex :Throwable =>
           log("exception closing socket")
           _soex.printStackTrace(Console.out)
       }
 
     catch {
-      case _cex =>
+      case _cex : Throwable =>
         _cex.printStackTrace(Console.out)
     }
   }
@@ -162,7 +162,7 @@ class Handler(_sel:Selector, _socket:SocketChannel, _receiver:ActorRef)
     try
       selectionKey.cancel
     catch {
-      case _soex =>
+      case _soex : Throwable =>
         _soex.printStackTrace(Console.out)
     }
     finally receiver ! (new SocketClosedMessage(null), this)

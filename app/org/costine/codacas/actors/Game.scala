@@ -703,7 +703,7 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 
 		case msg =>
 			log(s"unhandled message: ${msg}")
-      log(s"unhandled message class: ${msg.getClass.getTypeName}")
+      log(s"unhandled message class: ${msg.getClass.getName}")
 	}
 }
 

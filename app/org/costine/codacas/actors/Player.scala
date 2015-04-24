@@ -251,7 +251,7 @@ class Player(_userValidationService: UserValidationService) extends Actor with N
 	  	//
 	    case msg =>
 				log(s"unhandled message: ${msg}")
-				log(s"unhandled message class: ${msg.getClass.getTypeName}")
+				log(s"unhandled message class: ${msg.getClass.getName}")
 	}
 
 	def longMessage = s"${shortMessage}${Option(ship).fold("")(s => s"; ship ${s}")}'"
