@@ -711,7 +711,7 @@ object Game {
 	def ref : ActorRef = ref(new Game(false))
 
 	def ref(userService: UserValidationService, debug: Boolean): ActorRef =  {
-		actorSystem.actorOf(Props(new Game(debug)))
+		actorSystem.actorOf(Props(new Game(debug,userService)))
 	}
 
 	def ref(g: Game):ActorRef = ActorDSL.actor(g)

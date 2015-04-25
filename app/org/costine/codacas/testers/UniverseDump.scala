@@ -3,6 +3,8 @@ package org.costine.codacas.testers
 import org.costine.codacas._
 import org.costine.codacas.renderers._
 
+import scala.io.StdIn
+
 object UniverseDump  {
 	
 	private var currentShip:Ship = null
@@ -194,7 +196,7 @@ object UniverseDump  {
  
  	def run = {
 		var date = new java.util.Date 
-		var cmd = readLine().trim().toUpperCase
+		var cmd = StdIn.readLine.trim.toUpperCase
 		while (cmd != "Q") {
 		  var newdate = new java.util.Date
 		  val interval = newdate.getTime - date.getTime
@@ -202,7 +204,7 @@ object UniverseDump  {
 		  println("-------------------------------------------------------------")
 		  println(response(cmd))
 		  date = new java.util.Date
-		  cmd = readLine().trim().toUpperCase
+		  cmd = StdIn.readLine.trim.toUpperCase
 		}
 	}
 	newUniverse

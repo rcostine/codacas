@@ -15,13 +15,11 @@ it connect to the backend using websockets. This will allow streaming of game re
 Server setup
 ------------
 Currently, the way I've been starting the game server is to run the org.costine.codacas.system.Codacas application 
-with two parameters.
+with two named parameters -port and -interval.
 
-The first parameter is the listen port.
+The -port parameter is the number of milliseconds that the universe will be updated.
 
-The second parameter is the number of milliseconds that the universe will be updated.
-
-For example: org.costine.codacas.system.Codacas 2001 100
+For example: org.costine.codacas.system.Codacas -port 2001 -interval 100
 
 That starts the game, and listens on TCP port 2001, and updates the game state every tenth of a second.
 
@@ -36,7 +34,7 @@ This creates `target/universal/codacasng-1.0.zip`. Unzip that file somewhere.
 Then:
 
     $ cd codacasng-1.0/lib
-    $ java -cp $(echo *.jar|sed 's/ /:/g') org.costine.codacas.system.Codacas 2100 100
+    $ java -cp $(echo *.jar|sed 's/ /:/g') org.costine.codacas.system.Codacas -port 2100 -interval 100
 
 "Client" setup
 --------------
@@ -57,3 +55,6 @@ then
         sleep 5
 fi
 ```
+
+You can replace the "nc" with telnet, and that should work as well.
+

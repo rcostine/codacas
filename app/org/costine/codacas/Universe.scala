@@ -6,6 +6,7 @@ import scala.collection.mutable.ListBuffer
 import fi.utu.cs.physics.Point2
 import fi.utu.cs.physics.Body
 import org.costine.codacas.actors.Player
+import scala.language.postfixOps
 
 /**
  * logical Universe
@@ -164,7 +165,8 @@ class Universe(w:Double, h:Double,
         l += o.asInstanceOf[UniverseObject]
       }
     }
-    l toList
+
+    l.toList
   }
   
   def isPlaceable(o:UniverseObject):Boolean = {
