@@ -3,7 +3,7 @@ package org.costine.codacas
 import akka.actor.ActorRef
 import org.costine.codacas.interactions.{Phaser,PhaserResult}
 import org.costine.codacas.actors.Player
-import fi.utu.cs.physics.{Body,Point2}
+import fi.utu.cs.physics.{Vector2, Body, Point2}
 import java.util.Date
 import scala.collection.mutable.ListBuffer
 
@@ -29,10 +29,10 @@ class Ship(id:String, m:Double, s:Double, loc:Coordinate, u:Universe)
   var defaultTorpSize = u.initTorpSize
   
   var fooples = u.initialFooples
-  var wql = u.initialWql
+  var wql : Double = u.initialWql
   def foopleRechargeRate = u.foopleRechargeRate
   def torpReplenishRate = u.initTorpReplenishRate
-  var wqlRechargeRate = u.initialWql
+  var wqlRechargeRate = u.initialWqlRR
   
   var maxFooples = u.initialMaxFooples
   var maxTorps = u.initMaxShipTorps
@@ -43,6 +43,20 @@ class Ship(id:String, m:Double, s:Double, loc:Coordinate, u:Universe)
   var owner:String = null
   
   private var _player:ActorRef = null
+
+  var collidedWithStar : Option[Star] = None
+
+  def log (_x:String) = {
+    println ("Ship " + id + ": " + _x)
+  }
+
+  // pushing up against a star requires us to keep the
+  // last star around, and get the distance from it.
+  def distanceToCollidedStar : Option[Double] = {
+    collidedWithStar map {  cws =>
+        distance(cws)
+    }
+  }
   
   /**
    * restart this ship
@@ -56,6 +70,7 @@ class Ship(id:String, m:Double, s:Double, loc:Coordinate, u:Universe)
 	  fooples = u.initialFooples
 	  wql = u.initialWql
 	  wqlRechargeRate = u.initialWql
+    collidedWithStar = None
   }
   
   def player = _player
@@ -310,11 +325,70 @@ class Ship(id:String, m:Double, s:Double, loc:Coordinate, u:Universe)
       0
     }
   }
-  
+
+  // create a snapshot of a ship to compare with before the universe changed
+  def snap : Ship = {
+     val x = new Ship(id, m, s, loc.snap, u)
+      x.setPosition(getPosition)
+      x.setVelocity(getVelocity)
+      x
+  }
+
+
+  // handle how the ship will move through the universe and perform wql recharging
+  // based on how much the ship is attempting to move
+  override def advance (dt: Double) : Unit = {
+
+    //log (s"Time passed for ship: ${dt} msec")
+    val starting = snap
+
+    // these many are required for movement
+    val req = u.wqlReqForMove  * starting.getVelocity.length
+
+    // if wql = 0 freeze the ship while the universe inverts
+    if (wql <= req ) {
+      setVelocity(0.0, 0.0)
+      log(s"ship is frozen ${wql} <= ${req}")
+    }
+
+    // advance the ship in the universe
+    super.advance(dt)
+
+    // find the distance covered
+    val covered = distance(starting)
+    if (covered > 0.0) {
+      log(s"Covered ${covered} units")
+
+
+      // reduce the WQLs by the amount of distance covered but not negative
+      wql = math.max(0.0, math.min(u.initialWql, wql - (covered * u.wqlDropoffFactor) ))
+
+      log(s"wql after travelling: ${wql}")
+    }
+
+    // put old velocity back if wqls less than wqls required for moving
+    if (wql <= req ) setVelocity(starting.getVelocity)
+
+    // get distance to "collided with" star
+    val ds = distanceToCollidedStar filter(d => d> 0.0)
+
+    // Wql refresh rate depends on the density of the star
+    val cccsr = collidedWithStar filter {ss => ss.getRadius > 0}
+    val ccsr = cccsr map { star => (star.density.getOrElse(500.0)) / wqlRechargeRate }
+    val csr = ccsr.getOrElse(1.0)
+
+    // you get "these many more" based on wqlRechargeRate, the time passed, and the density of the pushed against star
+    val moreWql = ((dt / 1000.0) * wqlRechargeRate) * ( csr * (1.0 / (ds getOrElse(1.0))) )
+    //log(s"distance to collided with star = ${ds}, getting ${moreWql} more WQLs")
+
+    wql = math.min(u.initialWql,wql + moreWql)
+  }
+
   /**
    * let the ship's player know that a collision has occurred with the Body.
    */
   def informPlayerCollision (_body:Body) {
+
 	  // is the other body a ship? if so let that ship's player know
 	  if (_body.isInstanceOf[Ship]) {
 		  _body.asInstanceOf[Ship].player ! ("collide",this)
@@ -323,7 +397,6 @@ class Ship(id:String, m:Double, s:Double, loc:Coordinate, u:Universe)
 	    val _torp = _body.asInstanceOf[Torp]
 	    _torp.collidesWith(this)
 	  }
-
   }
   
   /**
@@ -344,7 +417,7 @@ class Ship(id:String, m:Double, s:Double, loc:Coordinate, u:Universe)
    * send a message to this Ship's Player when this ship has an inelasticCollision
    */
   override def inelasticCollision (_body:Body) = {
-	informPlayerCollision (_body)
+	  informPlayerCollision (_body)
     super.inelasticCollision(_body)
   }
   
@@ -371,4 +444,17 @@ class Ship(id:String, m:Double, s:Double, loc:Coordinate, u:Universe)
     ).mkString(s)
   }
 
+  override def toString : String = {
+
+    val d = distanceToCollidedStar.map {dc => s"; Distance: ${dc}"}.getOrElse("")
+
+    List(
+      s"Fpls: ${fooples}",
+      s"WQL: ${wql}",
+      s"Torps: ${torps.toInt}",
+      s"Pos(x,y): ${getPosition}",
+      s"Vel(x,y): ${getVelocity}"
+    ).mkString("; ") +
+      collidedWithStar.map {star => s"Star: [${star}${d}}]"}.getOrElse("")
+  }
 }

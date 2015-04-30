@@ -28,7 +28,7 @@ class Universe(w:Double, h:Double,
   private val pUniverse = new CodacasUniverse (w,h)
   
   private val shipPlacer = new ShipPlacer (this)
-  private val validShipNames = List (
+  val validShipNames = List (
     "A","B","C","D","E","F","G","H","I","J","K","L","M",
     "N","O","P","Q","R","S","T","U","V","W","X","Y","Z"
   )
@@ -52,12 +52,17 @@ class Universe(w:Double, h:Double,
   
   // ship will have this amount of WQL to start
   def initialWql = parameters.initialWql
-  
+
+  // wqls dropoff at this rate when ship is moving
+  def wqlDropoffFactor = parameters.wqlDropoffFactor
+
   // ship's fooples will recharge at these many per sec
   def foopleRechargeRate = parameters.foopleRechargeRate
   
   // ship's wql will recharge at these many per sec
-  def initialWqlRR = parameters.initialWqlRR
+  def initialWqlRR : Double = parameters.initialWqlRR
+
+  def wqlReqForMove : Double = parameters.wqlReqForMove
   
   // ship's max fooples will be this number
   def initialMaxFooples = parameters.initialMaxFooples

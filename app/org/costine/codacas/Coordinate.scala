@@ -86,4 +86,8 @@ class Coordinate(xLoc:Double, yLoc:Double) extends Point2(xLoc, yLoc) {
       }
       result
     }
+
+    def snap = {
+      new Coordinate(xLoc,yLoc)
+    }
 }

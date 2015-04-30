@@ -37,6 +37,7 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
  
 	private val digits = "0123456789"
 	private val dirs = "UDLR"
+	private lazy val validShipNames = universe.validShipNames.mkString.toCharArray
  
 	private var dbg = _debug
  
@@ -107,16 +108,26 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 	}
 
   // set the velocity of a vector in the universe
-  // Component is UDLR
+  // Component is UuDdLlRr
 	def setVelocity (_component:Char, _qty:String, _vect:Vector2) : Unit = {
 		val a = (if (_qty.trim.length == 0) 1 else Integer.parseInt(_qty.trim)) / 1000.0
-    _component match {
+
+    _component.toUpper match {
       case 'U' =>  _vect.setDeltaX(-a)
       case 'D' =>  _vect.setDeltaX(a)
       case 'L' =>  _vect.setDeltaY(-a)
       case 'R' =>  _vect.setDeltaY(a)
       case anything => log(s"invalid vector component encountered: ${anything}")
     }
+	}
+
+	// returns all the characters up to the one that is not in the list in the
+	// first element, and the rest (or Nil) in the second one
+	def findFirstNotIn (m: List[Char], valid: String) : (List[Char], List[Char]) = {
+		// get List of found/notfound
+		val v = m map { n => valid.indexOf(n)}
+		val pos = v.indexOf(-1)  // find first one not found
+		if (pos == -1) (m,Nil) else m.splitAt(pos)
 	}
 
 	// player wants to setup torps, or fire a torp in a direction
@@ -133,23 +144,42 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 	  val _shipName = _player.ship
 	  val _ship = this.universe.shipByName(_player.ship)
 
-    _opt.trim.toCharArray.toList match {
+    val l =  _opt.trim.toCharArray.toList match {
+      case x :: y => x.toUpper :: y
+      case Nil => Nil
+    }
+
+    l match {
       case 'R' :: rest =>
-        resetTorpRange(rest.mkString(""),_ship,act)
+				val (tp, more) = findFirstNotIn(rest,digits)
+        resetTorpRange(tp.mkString,_ship,act)
+				doCmd(more)(act,_player,_ship)
       case 'F' :: rest =>
-        resetTorpFuel(rest.mkString(""),_ship,act)
+				val (tp, more) = findFirstNotIn(rest,digits)
+        resetTorpFuel(tp.mkString,_ship,act)
+				doCmd(more)(act,_player,_ship)
       case 'P' :: rest =>
-        resetTorpPayload(rest.mkString(""),_ship,act)
+				val (tp, more) = findFirstNotIn(rest,digits)
+        resetTorpPayload(tp.mkString,_ship,act)
+				doCmd(more)(act,_player,_ship)
       case 'S' :: rest =>
-        resetTorpSpeed(rest.mkString(""),_ship,act)
+				val (tp, more) = findFirstNotIn(rest,digits)
+        resetTorpSpeed(rest.mkString,_ship,act)
+				doCmd(more)(act,_player,_ship)
       case '?' :: rest =>
-        act ! ("msg", _ship.torpInfoMessage("Torp Info: ", ";"))
+        msgPlayer(act,_ship.torpInfoMessage("Torp Info: ", ";"))
+				doCmd(rest)(act,_player,_ship)
       case 'G' :: rest =>
         val _tah = new HelpTorpAngles
         _tah.ship = _player.ship
         _tah.send(act)
+				doCmd(rest)(act,_player,_ship)
       case anything =>
-        fireTorp(anything.mkString(""),_ship,act)
+				val (tp, more) = findFirstNotIn(anything,digits)
+        if (!sendMsgIfDead(act, _ship, Some((List('T') :: tp).mkString.toList))) {
+          fireTorp(tp.mkString, _ship, act)
+        }
+				doCmd(more)(act,_player,_ship)
     }
 	}
 
@@ -244,33 +274,34 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 
     val x = transformNumber (_opt)(p,t) match {
       case Right(vv) => vv match {
-        case Some(x) => ("msg", _ship.fireTorp(x).message)
-        case None => ("msg",_ship.fireTorp.message)
+        case Some(x) => _ship.fireTorp(x).message
+        case None => _ship.fireTorp.message
       }
-      case Left(e) => ("msg", s"unknown torp command: ${_opt}")
+      case Left(e) => s"unknown torp command: ${_opt}"
     }
-    act ! x
+    msgPlayer(act,x)
   }
 
-  // send a text message
+  // send a text message -- this always eats up the rest of the line
+	// even if there is no ship
 	def cmdMsg (_opt:String, _fromPlayer:Player, act: ActorRef) = {
 		if (_opt.length > 2) {
 			val _to = _opt.substring(0,1).toUpperCase
-      Option(universe.shipByName (_to)) map { _toShip =>
-        val _fromShip = _fromPlayer.ship
-        val _m = _opt.substring(1,_opt.length)
-        getPlayer(_toShip.player) foreach { tp =>
-          tp._1 ! ("msg", s"From ${_fromShip}: ${_m}")
-          act ! ("msg", s"Message sent to ${_to}")
-        }
-      } getOrElse {
-        act ! ("msg", s"${_to} is not on. Message not sent.")
+      Option(universe.shipByName (_to)) match {
+        case Some(_toShip) =>
+          val _fromShip = _fromPlayer.ship
+          val _m = _opt.substring (1, _opt.length)
+          getPlayer (_toShip.player) foreach ( tp => {
+            msgPlayer (tp._1, s"From ${_fromShip}: ${_m}")
+            msgPlayer (act, s"Message sent to ${_to}")
+          })
+        case None => msgPlayer(act, s"${_to} is not on. Message not sent.")
       }
 		}
 	}
 
   // send a message to the player to ask who they are
-	def cmdWho (act: ActorRef) = {
+	def cmdWho (act: ActorRef) : Unit = {
 	  act ! ("who")
 	}
 
@@ -278,6 +309,15 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 	def cmdLogin (_login:String, act: ActorRef) = {
 	  act ! (getUser(_login))
 	}
+
+	// special commands start with ":" and are for future expansion.
+	def cmdSpecial (m: List[Char],_fromPlayer:Player, act: ActorRef) = {
+		 val s = m.mkString.trim
+			if (s.toUpperCase.startsWith("LOGIN ")) {
+				cmdLogin(s.substring(6, s.length),act)
+			}
+	}
+
 
   // get a user
 	def getUser(_user:String) = {
@@ -292,75 +332,51 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
     }
   }
 
-  // Do phaserish things
-	def cmdPhaser (_opt:String, _fromShip:Ship) = {
-		val _player = _fromShip.player
-		if (_opt.length > 2) {
-			val _to = _opt.substring(0,1).toUpperCase
-			val _toShip = universe.shipByName (_to)
-			if (_toShip != null) {
-			  if (_toShip.isAlive) {
-				 if (!_toShip.yanked) {
-					 try { 
-						 val amt:Int = java.lang.Math.abs(Integer.parseInt(_opt.substring(1,_opt.length)))
-						 val _phaser = new Phaser (_fromShip,_toShip,amt)
-					 	 val _result = _phaser.interact
-						 if (_result.code == _phaser.PHASER_OK) {
-							val _pResult = _result.asInstanceOf[PhaserResult]
-							if (_pResult.phaser.effective > 0) {
+  // Do phaserish thing to the toShip - like a 'PA100'
+	def cmdPhaser (amt: Int, _toShip: Ship)(act: ActorRef, _player:Player, _ship: Ship) : Unit= {
+		if (_toShip.isAlive) {
+		 if (!_toShip.yanked) {
+			 val _phaser = new Phaser (_ship,_toShip,amt)
+			 val _result = _phaser.interact
+			 if (_result.code == _phaser.PHASER_OK) {
+				val _pResult = _result.asInstanceOf[PhaserResult]
+				if (_pResult.phaser.effective > 0) {
 
-								getPlayer(_toShip.player) foreach { toPlayer =>
-									toPlayer._1 !("msg", s"Phaser Hit of ${_pResult.phaser.effective}")
-									if (_toShip.isDead) {
-										toPlayer._1 ! ("msg","You are dead.")
-										self ! ("broadcastAll", s"${_toShip.name} is dead.")
-									}
-								}
-                msgPlayer(_fromShip.player,s"${_result.message}; effective hit: ${_pResult.phaser.effective}")
-							}
-							else {
-                msgPlayer(_toShip.player,s"Ship ${_fromShip.name} tried to phaser you")
-								msgPlayer(_fromShip.player,s"Phasers ineffective at this range on ship ${_toShip.name}")
-							}
-						 }
-						 else msgPlayer(_fromShip.player,_result.message)
-
-					 }
-					 catch {
-				 		case _ex:Exception =>
-              _ex.printStackTrace(System.out)
-              msgPlayer(_player, s"Usage: P${_toShip.name}<number>")
-					 }
-				 }
-				 else msgPlayer(_player,s"${_to} is yanked")
-
-			  }
-			  else msgPlayer(_player,s"${_to} is already dead")
-			}
-			else {
-				if (universe.validShipName(_to))
-          msgPlayer(_player,s"Player ${_to} is not logged on")
-			}
+					getPlayer(_toShip.player) foreach { toPlayer =>
+						msgPlayer(toPlayer._1,s"Phaser Hit of ${_pResult.phaser.effective}")
+						if (_toShip.isDead) {
+							msgPlayer(toPlayer._1,"You are dead.")
+							self ! ("broadcastAll", s"${_toShip.name} is dead.")
+						}
+					}
+					msgPlayer(act,s"${_result.message}; effective hit: ${_pResult.phaser.effective}")
+				}
+				else {
+					msgPlayer(_toShip.player,s"Ship ${_ship.name} tried to phaser you")
+					msgPlayer(act,s"Phasers ineffective at this range on ship ${_toShip.name}")
+				}
+			 }
+			 else msgPlayer(act,_result.message)
+		 }
+		 else msgPlayer(act,s"${_toShip.name} is yanked")
 		}
-		else msgPlayer(_player, "Usage: P<ship><fooples>")
-
+		else msgPlayer(act,s"${_toShip.name} is already dead")
 	}
- 
+
 	// parse the whacky W command eg: wU1D3
-	def cmdMove (_dir:String, _player:Player, act: ActorRef) = {
-	  val _d = _dir.trim
+	def cmdMove (m: List[Char])(act: ActorRef, _player:Player, _ship: Ship) : Unit = {
+		val _d = m.mkString.trim.toUpperCase
 
 	  val usingShip = this.universe.shipByName(_player.ship)
 
 	  if (_d == "") {
 	    usingShip.setVelocity(0,0)
-	    act ! ("msg", "ship stopped")
+	    msgPlayer(act,"ship stopped")
 	  }
 	  else {
-
-
-      // TODO: this is fugly and needs to be reworked
+			// TODO: this is fugly and needs to be reworked
 		  val _v = usingShip.getVelocity
+
 		  var _cdr = ' '
 		  var _qty:StringBuilder = new StringBuilder
 
@@ -383,10 +399,15 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 		  }
 
 		  if (_cdr != ' ') setVelocity(_cdr,_qty.toString,_v)
-    
+
 		  usingShip.setVelocity(_v)
+
+      // we are moving, therefore no longer colliding with star
+      if (!usingShip.stopped) _ship.collidedWithStar = None
+
 		  usingShip.setAcceleration(0,0)
-	  } 
+
+	  }
 	}
 
 	// inform player that it is now off
@@ -464,6 +485,179 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 			h.out(new ShutdownMessage("game full. try later.", 10000))
 		}
 	}
+
+	// toggle player yank state
+	def cmdYank (_player : Player, _ship: Ship, act : ActorRef) : Boolean = {
+
+		if (_ship.unyank) {
+			act ! ("msg", "unyanked")
+			self ! ("broadcastAll", s"${_player.ship} unyanked.")
+			true
+		}
+		else {
+			if (_ship.yank) {
+				act ! ("msg", "yanked")
+				self ! ("broadcastAll", s"${_player.ship} yanked.")
+				false
+			}
+			else {
+				act ! ("msg", "already yanked")
+				false
+			}
+		}
+	}
+
+
+	// short command version of sendMsgIfDead
+	def sendMsgIfDead(act: ActorRef, _ship: Ship, cmd : Char) : Boolean = {
+		  sendMsgIfDead(act,_ship,Some(List(cmd)))
+	}
+
+	// send the player a message if they try to do a command that is not allowed when dead.
+	def sendMsgIfDead(act: ActorRef, _ship: Ship, cmd : Option[List[Char]]) : Boolean = {
+		if (_ship.isDead) {
+			cmd foreach {c => msgPlayer(act, s"Command '${cmd.mkString}' is not operational because you are still dead.") }
+		}
+		_ship.isDead()
+	}
+
+	def stillDead(act : ActorRef, _ship: Ship): Unit= {
+		if (_ship.isDead()) {
+			act !("msg", s"BTW, you are still dead.")
+		}
+	}
+
+	// do a command for an actor, player, ship
+	def doCmd(m : List[Char])(act: ActorRef , _player : Player, _ship : Ship) : Unit = {
+
+		m match {
+			case n :: rr =>
+				val l = n.toUpper :: rr
+				l match {
+
+					// Toggle yanking
+					case 'Y' :: rest =>
+						cmdYank(_player, _ship, act)
+						stillDead(act,_ship)
+						doCmd (rest)(act,_player,_ship)
+
+					// Galactic scan
+					case 'G' :: rest =>
+						act ! ("msg", cmdGalacticScan)
+						stillDead(act,_ship)
+						doCmd (rest)(act,_player,_ship)
+
+					// Short Scan
+					case 'S' :: rest =>
+						act ! ("msg", cmdShortScan(_player))
+						stillDead(act,_ship)
+						doCmd (rest)(act,_player,_ship)
+
+					// Fooples display
+					case 'F' :: rest =>
+						act ! ("msg", cmdFooples(_player))
+						stillDead(act,_ship)
+						doCmd (rest)(act,_player,_ship)
+
+					// Help
+					case '?' :: rest =>
+						new HelpInfo ().send (act)
+						stillDead(act,_ship)
+						doCmd (rest)(act,_player,_ship)
+
+					// About and dedications
+					case 'V' :: rest =>
+						new Info ().send (act)
+						stillDead(act,_ship)
+						doCmd (rest)(act,_player,_ship)
+
+					// Restart
+					case 'R' :: rest =>
+						restart (_player, act)
+						doCmd (rest)(act,_player,_ship)
+
+					// move (warp) or "WHO" command
+					case 'W' :: rest =>
+						// Who
+						if (rest.mkString.toUpperCase.startsWith("HO")) {
+							cmdWho(act)
+							stillDead(act,_ship)
+							doCmd(rest.drop(2))(act,_player,_ship)
+						}
+						// Move (Wxxxxx)
+						else {
+							val (c, more) = findFirstNotIn(rest, s"${dirs}${dirs.toLowerCase}${digits}")
+							if (!sendMsgIfDead(act,_ship,Some(c))) {
+								cmdMove(c)(act, _player, _ship)
+							}
+							doCmd(more)(act,_player,_ship)
+						}
+					// phaser  P<A-Z>nnnnn
+					case 'P' :: rest =>
+						rest match {
+
+							// p should be a ship name A-Z
+							case p :: pRest =>
+								validShipNames.find(z => z == p.toUpper) match {
+
+                  case None =>
+                    msgPlayer(act, s"Usage: P<ship><fooples>; Cannot phaser Ship '${p}'. It is not a valid ship name. Ships are addressed A-Z.")
+
+                  case Some(pp) =>
+                    Option[Ship](universe.shipByName(pp.toUpper.toString)) match {
+                      case None =>
+                        msgPlayer(act, s"Ship ${p} is not on.")
+                        val (c, more) = findFirstNotIn(pRest, s"${digits}")
+                        doCmd(more)(act, _player, _ship)
+
+                      case Some(toShip) =>
+                        val (c, more) = findFirstNotIn(pRest, s"${digits}")
+                        if (c.size > 0) {
+                          // P<player> with some amount
+                          if (!sendMsgIfDead(act, _ship, Some(s"P${p}${c.mkString}".toList)))
+                            cmdPhaser(c.mkString.toInt, toShip)(act, _player, _ship)
+                        }
+                        else msgPlayer(act,
+                          if (_ship.isAlive()) s"Usage: P<ship><fooples>; Phasering ${toShip} requires entering fooples <= ${_ship.fooples}"
+                          else s"You are still dead.")
+
+                        doCmd(more)(act, _player, _ship)
+                    }
+                }
+
+							// just a "P" entered
+							case Nil =>
+								msgPlayer(act, "Usage: P<ship><fooples>")
+
+						}
+
+          // message a player
+          case 'T' :: rest =>
+            cmdTorp(rest.mkString, _player,act)
+
+						// message a player
+					case 'M' :: rest =>
+						cmdMsg(rest.mkString, _player,act)
+
+					// do a "special command" -- they always end a line
+					case ':' :: rest =>
+						cmdSpecial(rest,_player,act)
+
+					// otherwise it is unknown
+					case cc :: rest =>
+						msgPlayer(act,s"Unknown Command: ${cc}")
+						doCmd(rest)(act,_player,_ship)
+
+					// Anything but nil will allow this to recurse for the line.
+          case Nil =>
+            log("End of command, encountered")
+				}
+      case Nil =>
+        log("End of command, encountered")
+		}
+
+	}
+
 
 	/**
 	 * Handle messages directed to us from other actors or objects.
@@ -575,120 +769,13 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 		// Players are not allowed to mess with the universe directly.
 		//
 		case ("cmd",_cmd: String) =>
-
       log(s"Game received command: ${_cmd}")
-
 			getPlayer(sender) foreach { p =>
-				val act = p._1
-				val _player = p._2
-
+				val (act, _player) = p
 				log("command " + _cmd + " from player " + _player.id + "; Ship " + _player.ship)
-				val _ship = universe.shipByName(_player.ship)
+				doCmd(_cmd.trim.toList)(act,_player, universe.shipByName(_player.ship))
+	  	}
 
-
-				// yank the player from the game
-				if (_cmd != "Y" && _ship.unyank) {
-					act ! ("msg", "unyanked")
-					self ! ("broadcastAll", s"${_player.ship} unyanked.")
-				}
-
-				// galactic scan
-				if (_cmd == "G") {
-					act ! ("msg", cmdGalacticScan)
-				}
-
-				// short scan
-				else if (_cmd == "S") {
-					act ! ("msg", cmdShortScan(_player))
-				}
-
-				// show fooples
-				else if (_cmd == "F") {
-					act ! ("msg", cmdFooples(_player))
-				}
-
-				// show help
-				else if (_cmd == "?") {
-					new HelpInfo().send(act)
-				}
-
-				// show version
-				else if (_cmd == "V") {
-					new Info().send(act)
-				}
-
-				// restart
-				else if (_cmd == "R") {
-					restart(_player,act)
-				}
-
-				// yank
-				else if (_cmd == "Y") {
-					if (universe.shipByName(_player.ship).yank) {
-						act ! ("msg", "yanked")
-						self ! ("broadcastAll",s"${_player.ship} yanked.")
-					}
-					else {
-						act ! ("msg", "already yanked")
-					}
-				}
-				else {
-					val _cmdLine = _cmd.split("  *")
-					val _cmdtrim = _cmd.trim
-					var _exec = ""
-					var _execUc = ""
-					var _param = ""
-					if (_cmdLine.length > 0) {
-						_exec = _cmdLine(0)
-						_execUc = _exec.toUpperCase
-						_param = _cmd.substring(_exec.length, _cmd.length)
-					}
-					// Who is the player logged in as
-					if (_cmdtrim.toUpperCase.equals("WHO")) {
-						cmdWho(act)
-					}
-					// move the ship
-					else if (_execUc.startsWith("W") && _ship.isAlive) {
-
-						if (_execUc.length > 1) {
-							cmdMove(_execUc.substring(1, _execUc.length), _player, act)
-						}
-						else {
-							cmdMove("", _player, act)
-						}
-					}
-					// phaser someone
-					else if (_execUc.startsWith("P") && _ship.isAlive) {
-						if (_execUc.length > 1) {
-							cmdPhaser(_execUc.substring(1, _execUc.length), _ship)
-						}
-					}
-					// torp someone
-					else if (_execUc.startsWith("T") && _ship.isAlive) {
-						if (_execUc.length > 1) {
-							cmdTorp(_execUc.substring(1, _execUc.length), _player, act)
-						}
-					}
-					// message someone
-					else if (_cmdtrim.toUpperCase.startsWith("M")) {
-						if (_cmdtrim.length > 1) {
-							cmdMsg(_cmdtrim.substring(1, _cmdtrim.length), _player,act)
-						}
-					}
-					// login the player
-					else if (_cmdtrim.toUpperCase.startsWith("LOGIN ")) {
-						if (_cmdtrim.length > 6) {
-							cmdLogin(_cmdtrim.substring(6, _cmdtrim.length),act)
-						}
-					}
-					else if (_ship.isDead) {
-						act ! ("msg", "You are still dead.")
-					}
-					else {
-						act ! ("msg", s"unknown command: ${_cmd}")
-					}
-				}
-	  }
     case (cm: SocketClosedMessage, _handler: Handler) =>
       getPlayer(_handler) foreach { p => playerOff (p._1,p._2) }
 
@@ -697,7 +784,9 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
         if (b.isInstanceOf[Star]) {
           val star = b.asInstanceOf[Star]
           p._1 ! ("msg", s"Collision with star of radius ${star.getRadius}.")
-          cmdMove("",p._2,p._1)
+          val shp = universe.shipByName(p._2.ship)
+          shp.collidedWithStar = Option(star)
+          cmdMove(Nil)(p._1,p._2,shp)
         }
       }
 
