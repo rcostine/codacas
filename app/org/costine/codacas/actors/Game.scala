@@ -27,6 +27,7 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 
 	// Directions for the "W" command
 	private val digits = "0123456789"
+	private val decimals = s"${digits}."
 	private val dirs = "UDLR"
 
 	case object Directions extends Directions
@@ -245,12 +246,17 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
   // Render Galactic scan to String
 	def cmdGalacticScan():String = new CharacterArrayRenderer (this.universe, 20, " ", "\n\r").toString
 
-  // Render short scan around player to String
+  // Render short scan around player to String ("S" defaults to the 40 units around player
 	def cmdShortScan(_player:Player): String = {
-    if (_player != null && _player.ship != null)
-      Option(this.universe.shipByName(_player.ship)) map
-        { _s => s"${new ShortRangeCharacterArrayRenderer(_s, 40, 11, " ", "\n\r").toString}\n\r${_s}" } getOrElse("")
-    else ""
+		cmdShortScan(_player,40)
+	}
+
+	// Render Ultra Short scan around player to String
+	def cmdShortScan(_player:Player, value: Double): String = {
+		if (_player != null && _player.ship != null)
+			Option(this.universe.shipByName(_player.ship)) map
+				{ _s => s"${new ShortRangeCharacterArrayRenderer(_s, value, 11, " ", "\n\r").toString}\n\r${_s}" } getOrElse("")
+		else ""
 	}
 
   // show foople display
@@ -690,7 +696,7 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 
 					// Short Scan
 					case 'S' :: rest =>
-						act ! ("msg", cmdShortScan(_player))
+						msgPlayer(act,cmdShortScan(_player))
 						stillDead(act,_ship)
 						doCmd (rest)(act,_player,_ship)
 
@@ -733,6 +739,22 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 							}
 							doCmd(more)(act,_player,_ship)
 						}
+					case 'U' :: rest =>
+						val (c, more) = findFirstNotIn(rest, s"${decimals}")
+						if (c == Nil) {
+							msgPlayer(act,cmdShortScan(_player,4.0))
+						}
+						else {
+							try {
+								val d = c.mkString.toDouble
+								msgPlayer(act, cmdShortScan(_player, d))
+							}
+							catch {
+								case e: Throwable => msgPlayer(act,s"Ultra short scan failed (try 4 to get a really short scan): ${e.getMessage}")
+							}
+						}
+						stillDead(act,_ship)
+						doCmd(more)(act,_player,_ship)
 					// phaser  P<A-Z>nnnnn
 					case 'P' :: rest =>
 						rest match {
