@@ -25,6 +25,162 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 		this(_debug,null)
 	}
 
+	// Directions for the "W" command
+	private val digits = "0123456789"
+	private val dirs = "UDLR"
+
+	case object Directions extends Directions
+
+  trait Directions {
+
+    sealed trait Component
+
+    def parse (s: String): Either[String,List[Component]] = parse(s.toList)(Nil)
+
+    def parse (s: List[Char])(c: List[Component]): Either[String,List[Component]] = {
+			s match {
+				case x :: rest =>
+					if (digits.indexOf(x) > -1) {
+						val (cc,more) = findFirstNotIn(rest,digits)
+						parse (more)(c :+ Magnitude(value = (x :: cc).mkString.toInt))
+					}
+					else {
+						val d = getDirection(x)
+						if (d.isDefined)
+							parse(rest)(c :+ d.get)
+						else
+							scala.util.Left(s"Invalid direction component: ${x}")
+					}
+				case Nil =>
+					scala.util.Right(c)
+			}
+    }
+
+
+    case class Magnitude (value: Int) extends Component
+
+    sealed trait Dir {
+      def value: Int
+    }
+
+    case object Positive extends Dir {
+      val value: Int = 1
+    }
+    case object Negative extends Dir {
+      val value: Int = -1
+    }
+
+    trait Direction extends Component {
+			def value: Char
+			def dir: Dir
+		}
+
+    case class HDirection(value: Char, dir: Dir ) extends Direction
+
+    case class VDirection(value: Char, dir: Dir) extends Direction
+
+
+    val directions : List[Direction] = List(
+			VDirection ('U', Negative),
+			VDirection ('D', Positive),
+			HDirection ('L', Negative),
+			HDirection ('R', Positive)
+		)
+
+    // add upper and lowercase directions to translating Map
+    lazy val directionsByChar: Map[Char,Direction] =
+      directions.foldLeft(Map[Char,Direction]()){(b,a) =>
+                        {
+													val v = b.+((a.value,a)).+((a.value.toUpper,a))
+													v
+												}
+      }
+
+    def getDirection(c: Char) = {
+			log(directionsByChar.mkString)
+			val v = directionsByChar.get(c.toUpper)
+			log(v.toString)
+			v
+		}
+
+		// parse each of the components
+		// the magnitude factor is used to control how fast WQLs are used up
+		// normal value is .001, but it can be set to any number.
+		// .01 will use up WQLs ten times faster.
+		def parseComponents(l: List[Component],mf: Double)(vect: Vector2): Vector2 = {
+
+			val n = copy(vect)
+			l match {
+					// W2L4U
+				case Magnitude(m1) :: HDirection(v1,d1) :: Magnitude(m2) :: VDirection(v2,d2) :: rest =>
+					n.setDeltaY(n.getDeltaY+(m1*mf*d1.value))
+					n.setDeltaX(n.getDeltaX+(m2*mf*d2.value))
+					parseComponents(rest,mf)(n)
+				// Wl2U4
+				case HDirection(v1,d1) :: Magnitude(m1) :: VDirection(v2,d2) :: Magnitude(m2) :: rest =>
+					n.setDeltaY(n.getDeltaY+(m1*mf*d1.value))
+					n.setDeltaX(n.getDeltaX+(m2*mf*d2.value))
+					parseComponents(rest,mf)(n)
+				// W2U4L
+				case Magnitude(m1) :: VDirection(v1,d1) :: Magnitude(m2) :: HDirection(v2,d2) :: rest =>
+					n.setDeltaY(n.getDeltaY+(m2*mf*d2.value))
+					n.setDeltaX(n.getDeltaX+(m1*mf*d1.value))
+					parseComponents(rest,mf)(n)
+				// W1U
+				case Magnitude(m) :: VDirection(v,d) :: rest =>
+					n.setDeltaX(n.getDeltaX+(m*mf*d.value))
+					parseComponents(rest,mf)(n)
+				// WU1
+				case VDirection(v,d) :: Magnitude(m) :: rest =>
+					n.setDeltaX(n.getDeltaX+(m*mf*d.value))
+					parseComponents(rest,mf)(n)
+				// W1L
+				case Magnitude(m) :: HDirection(v,d) :: rest =>
+					n.setDeltaY(n.getDeltaY+(m*mf*d.value))
+					parseComponents(rest,mf)(n)
+				// WL1
+				case HDirection(v,d) :: Magnitude(m) :: rest =>
+					n.setDeltaY(n.getDeltaY+(m*mf*d.value))
+					parseComponents(rest,mf)(n)
+				// WUL1
+				case VDirection(v1,d1) :: HDirection(v,d) :: Magnitude(m) :: rest =>
+					n.setDeltaX(n.getDeltaX+(m*mf*d1.value))
+					n.setDeltaY(n.getDeltaY+(m*mf*d.value))
+					parseComponents(rest,mf)(n)
+				// WLU1
+				case HDirection(v,d) :: VDirection(v1,d1) :: Magnitude(m) :: rest =>
+					n.setDeltaX(n.getDeltaX+(m*mf*d1.value))
+					n.setDeltaY(n.getDeltaY+(m*mf*d.value))
+					parseComponents(rest,mf)(n)
+				// WUL1
+				case VDirection(v1,d1) :: HDirection(v,d) :: rest =>
+					n.setDeltaX(n.getDeltaX+(mf*d1.value))
+					n.setDeltaY(n.getDeltaY+(mf*d.value))
+					parseComponents(rest,mf)(n)
+				// WLU1
+				case HDirection(v,d) :: VDirection(v1,d1) :: rest =>
+					n.setDeltaX(n.getDeltaX+(mf*d1.value))
+					n.setDeltaY(n.getDeltaY+(mf*d.value))
+					parseComponents(rest,mf)(n)
+				// WL
+				case HDirection(v,d) :: rest =>
+					n.setDeltaY(n.getDeltaY+(mf*d.value))
+					parseComponents(rest,mf)(n)
+				// WU
+				case VDirection(v1,d1) :: rest =>
+					n.setDeltaX(n.getDeltaX+(mf*d1.value))
+					parseComponents(rest,mf)(n)
+				case _ => vect
+			}
+		}
+
+		def copy(v: Vector2) : Vector2 = {
+			new Vector2(v.getDeltaX,v.getDeltaY)
+		}
+
+  }
+
+
 	private var userValidationService: UserValidationService = _userValidationService
   
 	private var uni:Universe =  newUniverse
@@ -34,9 +190,7 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 	private var timeLastAdvance = new Date ()
  
 	private var shuttingDown = false
- 
-	private val digits = "0123456789"
-	private val dirs = "UDLR"
+
 	private lazy val validShipNames = universe.validShipNames.mkString.toCharArray
  
 	private var dbg = _debug
@@ -60,12 +214,11 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 	}
  
 	def universe:Universe = {
-	  if (uni == null) {
-		  newUniverse
-	  }
+	  if (uni == null) newUniverse
 	  uni
 	}
- 
+
+	//  makes a new universe
 	def newUniverse = {
 	 
 		val uv = new Universe(
@@ -105,20 +258,6 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 		Option(this.universe.shipByName(_player.ship)) map { _s =>
       s"FPL=${_s.fooples}; WQL=${_s.wql}; T=${_s.torps.intValue}"
     } getOrElse ""
-	}
-
-  // set the velocity of a vector in the universe
-  // Component is UuDdLlRr
-	def setVelocity (_component:Char, _qty:String, _vect:Vector2) : Unit = {
-		val a = (if (_qty.trim.length == 0) 1 else Integer.parseInt(_qty.trim)) / 1000.0
-
-    _component.toUpper match {
-      case 'U' =>  _vect.setDeltaX(-a)
-      case 'D' =>  _vect.setDeltaX(a)
-      case 'L' =>  _vect.setDeltaY(-a)
-      case 'R' =>  _vect.setDeltaY(a)
-      case anything => log(s"invalid vector component encountered: ${anything}")
-    }
 	}
 
 	// returns all the characters up to the one that is not in the list in the
@@ -312,12 +451,28 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 
 	// special commands start with ":" and are for future expansion.
 	def cmdSpecial (m: List[Char],_fromPlayer:Player, act: ActorRef) = {
-		 val s = m.mkString.trim
-			if (s.toUpperCase.startsWith("LOGIN ")) {
-				cmdLogin(s.substring(6, s.length),act)
-			}
+		val s = m.mkString.trim
+		if (s.toUpperCase.startsWith("LOGIN "))
+			cmdLogin(s.substring("LOGIN ".length, s.length),act)
+		else if (s.toUpperCase.equals("WARP MAGNITUDE"))
+			cmdWarpMagnitude("",act)
+		else if (s.toUpperCase.startsWith("WARP MAGNITUDE "))
+			cmdWarpMagnitude(s.substring("WARP MAGNITUDE ".length,s.length).trim,act)
+		else
+			msgPlayer(act,s"Unknown Special Command: ${s}")
 	}
 
+	// set the scale of the warp magnitude components
+	def cmdWarpMagnitude(s:String,act:ActorRef) = {
+		if (s.trim.length == 0)
+			act ! ("warp", "magnitude")
+		else
+			try
+				act ! ("warp", "magnitude", s.toDouble)
+			catch {
+				case t : Throwable => msgPlayer(act, s"Cannot set warp magnitude ${s}; ${t.getMessage}")
+			}
+	}
 
   // get a user
 	def getUser(_user:String) = {
@@ -363,7 +518,13 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 		else msgPlayer(act,s"${_toShip.name} is already dead")
 	}
 
-	// parse the whacky W command eg: wU1D3
+  // parse the whacky W command eg: wU1D3
+  // Use cases:
+  // Nil: stop ship
+  //
+  // [dir]n[dir]n
+  // n[hdir][hdir]...
+  //
 	def cmdMove (m: List[Char])(act: ActorRef, _player:Player, _ship: Ship) : Unit = {
 		val _d = m.mkString.trim.toUpperCase
 
@@ -374,39 +535,18 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 	    msgPlayer(act,"ship stopped")
 	  }
 	  else {
-			// TODO: this is fugly and needs to be reworked
-		  val _v = usingShip.getVelocity
+			val components = Directions.parse(m)(Nil)
+			components match {
+				case Left(msg) => msgPlayer(act,msg)
+				case Right(l) =>
+					val vel = Directions.parseComponents(l,_player.wCommandMagnitudeFactor)(Vector2.ZERO)
+					usingShip.setVelocity(vel)
 
-		  var _cdr = ' '
-		  var _qty:StringBuilder = new StringBuilder
+					// we are moving, therefore no longer colliding with star
+					if (!usingShip.stopped) _ship.collidedWithStar = None
 
-		  for (_ddd <- _d.toArray) {
-
-		    if (dirs.indexOf(_ddd.toString) > -1) {
-
-		    	if (_cdr == ' ') {
-		    	  _cdr = _ddd
-		    	}
-		    	else { 
-		    		setVelocity(_cdr,_qty.toString,_v)
-		    		_cdr = _ddd
-		    		_qty = new StringBuilder
-		    	}
-		    }
-		    else if (digits.indexOf(_ddd.toString) > -1) {
-		    	if (_cdr != ' ') _qty.append(_ddd.toString)
-		    }
-		  }
-
-		  if (_cdr != ' ') setVelocity(_cdr,_qty.toString,_v)
-
-		  usingShip.setVelocity(_v)
-
-      // we are moving, therefore no longer colliding with star
-      if (!usingShip.stopped) _ship.collidedWithStar = None
-
-		  usingShip.setAcceleration(0,0)
-
+					usingShip.setAcceleration(0,0)
+			}
 	  }
 	}
 
@@ -474,12 +614,13 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 
 
 	// register a new player
+	// send back the handler, the ship name, and the initial value for warp command magnitude factor
 	def newPlayer (h: Handler) = {
 		val s = this.universe.newShip
 		if (s != null) {
 			val act = Player.ref(this.userValidationService)
 			s.player(act)
-			act ! (h, s.name)
+			act ! (h, s.name, this.universe.wCommandMagnitudeFactor)
 		}
 		else {
 			h.out(new ShutdownMessage("game full. try later.", 10000))

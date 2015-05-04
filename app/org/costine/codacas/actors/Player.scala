@@ -45,7 +45,10 @@ class Player(_userValidationService: UserValidationService) extends Actor with N
 	var ship:String = null
 	//var game:ActorRef = null
 
- 
+	// this setting should survive between ship usages, and is set by the game during startup
+  var wCommandMagnitudeFactor : Double = 0.001
+
+
 	private var commandBuffer = new StringBuilder()
  
 	private val commandChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ;:\"'[]{}+=-_()!@#$%^&*<>,.?/\\~`|"
@@ -96,12 +99,13 @@ class Player(_userValidationService: UserValidationService) extends Actor with N
 	    // ----
 	    // initial message from the Game actor, establishing this Player
 	    //
-	  	case (_handler:Handler, _ship:String) =>
+	  	case (_handler:Handler, _ship:String, _wCommandMagnitudeFactor: Double) =>
 
 	  	  startTime
 				game = Some(sender)
 	  	  handler = _handler
 	  	  ship = _ship
+				wCommandMagnitudeFactor = _wCommandMagnitudeFactor
 
 				sender ! (this)  // send this player back to the game actor to let it know we are set up
 	  	  log("is on.")
@@ -139,7 +143,17 @@ class Player(_userValidationService: UserValidationService) extends Actor with N
 				outputln (
 					if (name != null) s"logged in as $name" else "not logged in"
 				)
-	  	  
+
+			case("warp", "magnitude", mf: Double) => {
+				wCommandMagnitudeFactor = mf
+				outputln(s"warp magnitude factor set to ${wCommandMagnitudeFactor}")
+			}
+
+			case("warp", "magnitude") => {
+				outputln(s"warp magnitude factor is ${wCommandMagnitudeFactor}")
+			}
+
+
 	  	// ----
 	  	// response from login validation
 	  	// 

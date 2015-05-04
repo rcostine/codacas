@@ -100,6 +100,11 @@ class Universe(w:Double, h:Double,
   // ship available mines won't start to get replaced until the ships
   // fooples reach this number.
   def minMineReplenishFpl = parameters.minMineReplenishFpl
+
+  // W command multiplier
+  // the higher this number the faster your WQLs will run out
+  // default is 0.001, but override by player with special command ":warp magnitude <value>"
+  def wCommandMagnitudeFactor = parameters.wCommandMagnitudeFactor
   
   // list of yanked ships
   var yanked: ListBuffer[Ship] = new ListBuffer[Ship]

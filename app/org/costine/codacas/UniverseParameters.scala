@@ -63,5 +63,10 @@ class UniverseParameters {
   // ship available mines won't start to get replaced until the ships
   // fooples reach this number.
   var minMineReplenishFpl = 2000
+
+  // W command magnitude multiplier
+  // When specifying numbers in W command they will be scaled appropriately by
+  // multiplying by this value, by default.
+  var wCommandMagnitudeFactor = 0.001
  
 }
