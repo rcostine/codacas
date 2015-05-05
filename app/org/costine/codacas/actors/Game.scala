@@ -275,6 +275,65 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 		if (pos == -1) (m,Nil) else m.splitAt(pos)
 	}
 
+	def plotCourse (from:UniverseObject, to: UniverseObject, speed: Double): Vector2 = {
+		val v = new Vector2(from.getPosition, to.getPosition)
+		val l = v.length() * speed
+		v.setDeltaX(v.getDeltaX * l)
+		v.setDeltaY(v.getDeltaY * l)
+		v
+	}
+
+
+
+	def gotoPlayer(_fromPlayer : Player, _toPlayer: Option[Player], speed: Double) : Option[Vector2] = {
+		_toPlayer map { _tp =>
+			val _from = this.universe.shipByName(_fromPlayer.ship)
+			val _to = this.universe.shipByName(_tp.ship)
+			val vect = plotCourse(_from, _to, speed * _fromPlayer.wCommandMagnitudeFactor)
+			_from.setVelocity(vect)
+			vect
+		}
+	}
+
+	def gotoStar(_fromPlayer : Player, _toStar: Option[Star], speed: Double) : Option[Vector2] = {
+		_toStar map { _tp =>
+			val _from = this.universe.shipByName(_fromPlayer.ship)
+			val vect = plotCourse(_from, _tp, speed * _fromPlayer.wCommandMagnitudeFactor)
+			_from.setVelocity(vect)
+			vect
+		}
+	}
+
+	def gotoClosestStar (_fromPlayer: Player, speed: Double) : Vector2 = {
+		val _from = this.universe.shipByName(_fromPlayer.ship)
+		val (_to,_todist) = findNearestStar(_from)
+		val vect = plotCourse(_from,_to, speed * _fromPlayer.wCommandMagnitudeFactor)
+		_from.setVelocity(vect)
+		// we are moving, therefore no longer colliding with star
+		if (!_from.stopped) _from.collidedWithStar = None
+
+		_from.setAcceleration(0,0)
+		vect
+	}
+
+	def gotoNearestShip(_fromPlayer : Player, speed: Double) : Vector2 = {
+		val _from = this.universe.shipByName(_fromPlayer.ship)
+		val (_to,_todist) = findNearestShip(_from)
+		val vect = plotCourse(_from,_to, speed * _fromPlayer.wCommandMagnitudeFactor)
+		_from.setVelocity(vect)
+		vect
+	}
+
+	// gets nearest ship that is not us
+	def findNearestShip (_fromShip: Ship) : (Ship, Double) = {
+		universe.ships filter { fs => !fs.name.equals(_fromShip.name)} map {s => (s,_fromShip.distance(s))} minBy {_._2}
+	}
+
+	// gets nearest star
+	def findNearestStar (_fromShip: Ship) : (Star, Double) = {
+		universe.stars map {s => (s,_fromShip.distance(s))} minBy {_._2}
+	}
+
 	// player wants to setup torps, or fire a torp in a direction
 	// set torp parameters:
     // TRunits - set max torp range after explosion.
@@ -798,9 +857,29 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
           case 'T' :: rest =>
             cmdTorp(rest.mkString, _player,act)
 
-						// message a player
+					// message a player
 					case 'M' :: rest =>
 						cmdMsg(rest.mkString, _player,act)
+
+					// move towards closest star
+					case 'C' :: rest =>
+						val (c, more) = findFirstNotIn(rest, s"${decimals}")
+						if (c == Nil) {
+							gotoClosestStar(_player,1)
+							msgPlayer(act,cmdShortScan(_player))
+						}
+						else {
+							try {
+								val d = c.mkString.toDouble
+								gotoClosestStar(_player,d)
+								msgPlayer(act, cmdShortScan(_player))
+							}
+							catch {
+								case e: Throwable => msgPlayer(act,s"Closest star nav failed: ${e.getMessage}")
+							}
+						}
+						stillDead(act,_ship)
+						doCmd(more)(act,_player,_ship)
 
 					// do a "special command" -- they always end a line
 					case ':' :: rest =>

@@ -15,12 +15,12 @@ class CharacterArrayRenderer(_u:Universe, _s:Int, _sep:String, _lsep:String)
 	  val ygridStep = universe.height / size
 	  var _x:Double = 0
 	  for (i <- 0 to (size - 1)) {
-	    var _xe = _x + xgridStep
+	    val _xe = _x + xgridStep
 	    var _y:Double = 0
-	    var r = new Array[String](size)
+	    val r = new Array[String](size)
 	    a(i) = r
 	    for (j <- 0 to (size - 1)) {
-	      var _ye = _y + ygridStep
+	      val _ye = _y + ygridStep
        
 	      val objs = universe.locateObjectsInGrid(_x, _xe, _y, _ye)
 	      if (objs.size == 0) {

@@ -13,13 +13,13 @@ class UniverseParameters {
   // ship's wql will recharge at these many per sec
   // with a multiplier based of the distance to the pushed up against
   // star, if one is contained in the ship.
-  var initialWqlRR:Double = 10.0
+  var initialWqlRR:Double = 30.0
 
   // minimum wql to allow movement
   var wqlReqForMove = 1000.0
 
   // dropoff these many wqls per covered units
-  var wqlDropoffFactor: Double = 100.0
+  var wqlDropoffFactor: Double = 10.0
   
   // ship's max fooples will be this number
   var initialMaxFooples = 4000

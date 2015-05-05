@@ -37,11 +37,11 @@ class ShortRangeCharacterArrayRenderer(
       for (i <- 0 to (size - 1)) {
 	    var _xe = universe.wrapWidth(_x + gridStep)
 
-	    var r = new Array[String](size)
+	    val r = new Array[String](size)
 	    a(i) = r
 	    var _y = universe.wrapWidth(ship.location.y - center)
 	    for (j <- 0 to (size - 1)) {
-	      var _ye = universe.wrapHeight(_y + gridStep)
+	      val _ye = universe.wrapHeight(_y + gridStep)
 
 	      val objs = universe.locateObjectsInGrid(_x, _xe, _y, _ye)
 	      if (objs.size == 0) {
