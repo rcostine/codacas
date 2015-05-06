@@ -5,6 +5,8 @@ import org.costine.codacas.interactions.{Phaser,PhaserResult}
 import org.costine.codacas.actors.Player
 import fi.utu.cs.physics.{Vector2, Body, Point2}
 import java.util.Date
+import org.costine.codacas.system.Logging
+
 import scala.collection.mutable.ListBuffer
 
 /**
@@ -12,8 +14,12 @@ import scala.collection.mutable.ListBuffer
  */
 class Ship(id:String, m:Double, s:Double, loc:Coordinate, u:Universe)
   extends MassiveObject (m:Double, s: Double, loc:Coordinate, u:Universe)
- with Naming {
-  
+ with Naming with Logging {
+
+  def logPrefix =  s"Ship ${id}"
+
+  def debug = false
+
   var lastChargeTime = new Date ().getTime
   
   // count of torps that are ready to fire
@@ -45,10 +51,6 @@ class Ship(id:String, m:Double, s:Double, loc:Coordinate, u:Universe)
   private var _player:ActorRef = null
 
   var collidedWithStar : Option[Star] = None
-
-  def log (_x:String) = {
-    println ("Ship " + id + ": " + _x)
-  }
 
   // pushing up against a star requires us to keep the
   // last star around, and get the distance from it.

@@ -6,6 +6,7 @@ import java.nio.charset._
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import akka.actor.ActorRef
+import org.costine.codacas.system.Logging
 
 import scala.annotation.tailrec
 
@@ -19,8 +20,10 @@ import scala.annotation.tailrec
  * 
  */
 class Handler(_sel:Selector, _socket:SocketChannel, _receiver:ActorRef)
-  extends Runnable {
- 
+  extends Runnable with Logging {
+
+  def debug = false
+
   val MAXIN = 64*1024
   val MAXOUT = 64*1024
   
@@ -66,7 +69,7 @@ class Handler(_sel:Selector, _socket:SocketChannel, _receiver:ActorRef)
   /**
    * log a message to the console log
    */
-  def log (_msg:String) = println (s"Handler ${this.hashCode }: ${id} ${_msg}")
+  def logPrefix = s"Handler ${this.hashCode }: ${id}"
 
   
   val input:ByteBuffer = ByteBuffer.allocate(MAXIN)

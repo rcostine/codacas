@@ -7,9 +7,14 @@ import java.nio._
 import java.nio.channels._
 import java.nio.channels.spi._
 import akka.actor.ActorRef
+import org.costine.codacas.system.Logging
 
-class Reactor(_port:Int, _receiver:ActorRef ) extends Runnable {
-  
+class Reactor(_port:Int, _receiver:ActorRef ) extends Runnable with Logging {
+
+	def debug = false
+
+	def logPrefix = "Reactor"
+
   val port = _port
   val receiver = _receiver
   val selector:Selector = Selector.open
@@ -25,10 +30,7 @@ class Reactor(_port:Int, _receiver:ActorRef ) extends Runnable {
      val _sk = _sc.register(selector,SelectionKey.OP_ACCEPT)
      _sk.attach(new Acceptor (this))
   }
-  
-  def log (_msg:String) = {
-    println ("Reactor: " + _msg)
-  }
+
 
   
   def dispatch (_sk:SelectionKey) = {

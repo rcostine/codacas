@@ -3,18 +3,23 @@ package org.costine.codacas.actors
 import akka.actor._
 import java.net._
 import java.io._
-import org.costine.codacas.network.Handler
-import org.costine.codacas.network.ShutdownMessage
+import org.costine.codacas.network.{GameShutdownMessage, Handler, ShutdownMessage}
 import fi.utu.cs.physics.Body
 import org.costine.codacas.{Naming, Torp}
 import java.util.Date
 import org.costine.codacas.database._
+import org.costine.codacas.system.Logging
+
+import scala.concurrent.Await
 
 
 /**
  * Player actor is connected to a handler. 
  */
-class Player(_userValidationService: UserValidationService) extends Actor with Naming {
+class Player(_userValidationService: UserValidationService) extends Actor with Naming with Logging{
+
+	def debug = false
+
 	var handler:Handler = null
 	
 	var user:User = User(null,null)
@@ -57,14 +62,12 @@ class Player(_userValidationService: UserValidationService) extends Actor with N
 	// get a result without typing enter. If the buffer is not empty, hitting 
 	// enter clears the buffer and executes a multicharacter command
 	private val singleKeyCommands = "GSYF?VR"
- 
- 	def log (_x:String) = {
-		println ("Player " + id + "; ship " + ship + " : " + _x)
-	}
+
+	def logPrefix = s"Player ${id}; ship ${ship}"
  
 	// send output to writer
  	def output (_x:String) = {
-		handler.out(_x)
+		Option(handler) foreach(_.out(_x))
 	}
   
 	def outputln (_x:String) = {
@@ -259,7 +262,21 @@ class Player(_userValidationService: UserValidationService) extends Actor with N
       	//
 			case (_msg:ShutdownMessage) =>
 				log(s"received player shutdown msg ${_msg.text}")
-      	
+
+			// ----
+			// received a GameShutdownMessage, dump it, and stop this players handler
+			//
+			case (GameShutdownMessage(text,time)) =>
+				log(s"received player Game shutdown msg ${text}")
+				outputln(s"shutting down: ${text}")
+				import scala.concurrent._
+				import ExecutionContext.Implicits.global
+				val fs = Option(handler) map { h =>
+					Future {
+						h.socket.close()
+					}
+				}
+
 	  	// ----
 	  	// indicate (on the console) that an unhandled message was received
 	  	//

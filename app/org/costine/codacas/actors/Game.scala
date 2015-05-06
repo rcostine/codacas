@@ -2,15 +2,14 @@ package org.costine.codacas.actors
 
 import akka.actor._
 import akka.routing.RoundRobinRouter
+import org.costine.codacas.system.Codacas.CodacasRuntime
 import scala.collection.mutable.ListBuffer
 import scala.collection.mutable.HashSet
 import java.util.Date
 import java.net._
 import java.io._
 import org.costine.codacas.system._
-import org.costine.codacas.network.Handler
-import org.costine.codacas.network.ShutdownMessage
-import org.costine.codacas.network.SocketClosedMessage
+import org.costine.codacas.network.{GameShutdownMessage, Handler, ShutdownMessage, SocketClosedMessage}
 import org.costine.codacas.renderers._
 import org.costine.codacas.interactions._
 import fi.utu.cs.physics.Vector2
@@ -19,16 +18,22 @@ import org.costine.codacas._
 import org.costine.codacas.database.{UserValidationService, User}
 import java.lang.Math.abs
 
-class Game(_debug:Boolean, _userValidationService: UserValidationService) extends Actor {
+class Game(_debug:Boolean, _userValidationService: UserValidationService) extends Actor with Logging{
 
 	def this(_debug:Boolean) = {
 		this(_debug,null)
 	}
 
+	val id = new Date ().getTime.toString
+
+	def logPrefix = s"Game ${id}"
+
 	// Directions for the "W" command
 	private val digits = "0123456789"
 	private val decimals = s"${digits}."
 	private val dirs = "UDLR"
+
+	private var codacasRuntime: Option[CodacasRuntime] = None
 
 	case object Directions extends Directions
 
@@ -197,18 +202,6 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 	private var dbg = _debug
  
 	def debug = { dbg }
- 
-	val id = new Date ().getTime.toString
-
-	def log (_x:String) = {
-		println ("Game " + id + ": " + _x)
-	}
- 	
- 	def debug (_x:String):Unit = {
- 	  if (debug) {
- 		  log (_x)
- 	  }
- 	}
  
 	def universe (_u:Universe) = {
 	  uni = _u
@@ -523,6 +516,8 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
 			cmdWarpMagnitude("",act)
 		else if (s.toUpperCase.startsWith("WARP MAGNITUDE "))
 			cmdWarpMagnitude(s.substring("WARP MAGNITUDE ".length,s.length).trim,act)
+		else if (s.toUpperCase.trim.equals("SHUTDOWN"))
+			codacasRuntime foreach { _.shutdown }
 		else
 			msgPlayer(act,s"Unknown Special Command: ${s}")
 	}
@@ -1031,6 +1026,14 @@ class Game(_debug:Boolean, _userValidationService: UserValidationService) extend
           cmdMove(Nil)(p._1,p._2,shp)
         }
       }
+
+		case (GameShutdownMessage(text,time)) =>
+			playerMap foreach { pl =>
+				pl._1 ! (GameShutdownMessage(text,time))
+			}
+
+		case CodacasRuntime(g,l) =>
+			codacasRuntime = Some(CodacasRuntime(g,l))
 
 		case msg =>
 			log(s"unhandled message: ${msg}")
