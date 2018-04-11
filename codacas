@@ -1,0 +1,13 @@
+#!/bin/bash
+clear
+save_state=$(stty -g)
+stty raw -echo
+nc localhost 2001
+rc=$?
+stty "$save_state"
+if [ $rc -ne 0 ]
+then
+        echo
+        echo "Game down for maintenance, try again later."
+        sleep 5
+fi

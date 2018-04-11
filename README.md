@@ -8,7 +8,7 @@ This was a popular multi-user game played on the Control Data hardware at Temple
 
 Environment
 -----------
-This rendition is setup as a Play 2.3 (typesafe-activator) project. Currently, there is no web-based interaction with the
+This rendition is setup as a http4s project. Currently, there is no web-based interaction with the
 Game and Player actors (but this is planned). The intention is to expand the game to use scala.js on the front-end, and have
 it connect to the backend using websockets. This will allow streaming of game related events back to the browser in realtime.
 
@@ -23,18 +23,11 @@ For example: org.costine.codacas.system.Codacas -port 2001 -interval 100
 
 That starts the game, and listens on TCP port 2001, and updates the game state every tenth of a second.
 
-I've been loading the application in intellij, and running the class there. Eventually, once this becomes a real Play app,
-the game engine will be started as a background job.
-
 Another easy way to run the server:
 
-    $ play dist
+    $ sbt run
 
-This creates `target/universal/codacasng-1.0.zip`. Unzip that file somewhere.
-Then:
-
-    $ cd codacasng-1.0/lib
-    $ java -cp $(echo *.jar|sed 's/ /:/g') org.costine.codacas.system.Codacas -port 2100 -interval 100
+Then select the CodacasServer main
 
 "Client" setup
 --------------
